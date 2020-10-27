@@ -31,11 +31,15 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef enum {
+	false,
+	true
+} bool;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define FCLK 72000000
+#define CLOCK 72000000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,6 +59,7 @@ void SystemClock_Config(void);
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 int calculacte_frequency();
 int calculate_duty();
+bool check_value_change(int, int);
 
 /* USER CODE END PFP */
 
@@ -63,6 +68,8 @@ int calculate_duty();
 
 uint16_t duty = 120;
 uint16_t period = 239;
+
+bool valueChanged = false;
 /* USER CODE END 0 */
 
 /**
@@ -73,6 +80,9 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 	char buffer[20] = "INITIALIZATION";
+	uint16_t oldPeriod = period;
+	uint16_t oldDuty = duty;
+	bool valueChanged = false;
 
   /* USER CODE END 1 */
 
@@ -105,10 +115,18 @@ int main(void)
   lcd_send_string(buffer);
   HAL_Delay(3000);
 
+  lcd_clear();
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  volatile int buttonPressed = 0;
+  volatile int buttonPressedConfidenceLevel = 0;
+  volatile int buttonReleasedConfidenceLevel = 0;
+  volatile int confidenceThreshold = 20;
 
 
   while (1)
@@ -117,21 +135,64 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  /*
+
+	if(HAL_GPIO_ReadPin(BTN4_GPIO_Port, BTN4_Pin) == 0)
+	{
+		if (buttonPressed == 0)
+		{
+			if (buttonPressedConfidenceLevel > confidenceThreshold)
+			{
+				duty += 10;
+				buttonPressed = 1;
+			}
+			else
+			{
+				buttonPressedConfidenceLevel++;
+				buttonReleasedConfidenceLevel = 0;
+			}
+		}
+	}
+
+	else
+	{
+		if (buttonPressed == 1)
+		{
+			if (buttonReleasedConfidenceLevel > confidenceThreshold)
+			{
+				buttonPressed = 0;
+			}
+			else
+			{
+				buttonReleasedConfidenceLevel++;
+				buttonPressedConfidenceLevel = 0;
+			}
+		}
+	}
+
+
+	*/
+
 
 	  __HAL_TIM_SET_AUTORELOAD(&htim2, period);
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, duty);
-	  lcd_clear();
-	  sprintf(buffer, "Freq: %d KHz", calculacte_frequency());
-	  lcd_send_string(buffer);
-	  lcd_put_cur(1, 0);
-
-	  sprintf(buffer, "Duty: %d", calculate_duty());
-	  lcd_send_string(buffer);
-	  lcd_send_string("%");
 
 
-	  HAL_Delay(50);
+	  valueChanged = check_value_change(oldDuty, oldPeriod);
+	  if(valueChanged)
+	  {
+		  lcd_clear();
+		  lcd_put_cur(0, 0);
+		  sprintf(buffer, "Freq: %d KHz", calculacte_frequency());
+		  lcd_send_string(buffer);
+		  oldPeriod = period;
 
+		  lcd_put_cur(1, 0);
+		  sprintf(buffer, "Duty: %d", calculate_duty());
+		  lcd_send_string(buffer);
+		  lcd_send_string("%");
+		  oldDuty = duty;
+	  }
 
   }
   /* USER CODE END 3 */
@@ -184,31 +245,31 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		if(period > 239)
 		{
 			if(duty >= period)			// to not overlimit duty cycle
-				duty = period - 20;
-			period -= 10;
+				duty = period--;
+			period -= 1;
 		}
 	}
 	else if(GPIO_Pin == BTN2_Pin)
 	{
 		if(period < 719 )
-			period += 10;
+			period++;
 	}
 	else if(GPIO_Pin == BTN3_Pin)
 	{
 		if(duty > 0)
-			duty -= 10;
+			duty--;
 	}
 	else if(GPIO_Pin == BTN4_Pin)
 	{
 		if(duty < period)
-			duty += 10;
+			duty++;
 	}
 
 }
 
 int calculacte_frequency()
 {
-	return FCLK / (period + 1) / 1000;
+	return CLOCK / (period + 1) / 1000;
 }
 
 int calculate_duty()
@@ -217,6 +278,15 @@ int calculate_duty()
 	result = (float)duty/(float)period * 100;
 
 	return (int)result;
+}
+
+bool check_value_change(int oldDuty, int oldPeriod)
+{
+	if(oldDuty != duty || oldPeriod != period)
+		return true;
+	else
+		return false;
+
 }
 
 /* USER CODE END 4 */
